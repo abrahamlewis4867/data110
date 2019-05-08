@@ -1,0 +1,565 @@
+---
+title: " Final Project "
+author: "Abraham Lewis"
+date: "April 24, 2019"
+output: html_document
+---
+
+
+
+# **Introduction**
+
+I have decided to do this project on a topic that concerns me greatly and makes me very sad. Hopefully some light can be thrown on this topic.
+The World Health Organization reported every 40 seconds a person somewhere in the world commits suicide. Despite this outrageously high statistic, WHO said only a handful of countries have policies aimed at suicide prevention.
+Source:https://www.who.int/
+
+[alt text here]()
+```{r}
+library(readr)
+library(dplyr)
+library(ggplot2)
+library(plotly)
+library(gapminder)
+library(ggthemes)
+library(ggpubr)
+library(cowplot)    
+library(grid)
+library(data.table)
+library(gridExtra)    
+
+library(viridisLite)
+library(scales)
+library(DT) 
+
+
+options(scipen=999)
+
+```
+
+## **Import Data and Problems**
+
+```{r}
+m<-read.csv("master.csv")
+```
+
+```{r}
+str(m)
+```
+
+```{r}
+glimpse(m)
+```
+
+
+
+
+```{r}
+sum(complete.cases(m))
+
+```
+
+```{r}
+sum(is.na(m))
+```
+
+
+```{r}
+summary(m)
+```
+
+
+
+```{r}
+names(m) 
+```
+
+
+```{r}
+  m<-rename(m, "country"="ï..country","gdp.c"="gdp_per_capita....","gdp.y"="gdp_for_year....")
+```
+
+
+I started to clean the data then I thought "I should probably check how many countries are in this set"
+```{r}
+
+select(m,country) %>% unique %>% nrow 
+```
+
+
+
+```{r}
+unique(m$country)
+```
+
+This data set is missing a lot most importanly china india and at least 90 countries.
+
+
+
+```{r}
+       m1<- m%>%
+group_by(country) %>% 
+  summarise(total_suicides = sum(suicides_no,na.rm=TRUE)) %>%
+  arrange(desc(total_suicides))
+```
+
+
+```{r}
+m1
+```
+
+I thought to check my data set against another data set. I chose the nations of the world data set which I got from kaggle.
+```{r}
+nations <- read_csv("nations.csv")
+```
+
+```{r}
+select(nations,country) %>% unique %>% nrow
+```
+
+```{r}
+unique(nations$country)
+```
+***present problems***
+Still,this data set had the reverse problem of the previous one, with countries being repeated or countries that no longer exsisted or territoires such as St. Vincent and the Grenadines,bieng included in data.
+So I finally went to the internet and just looked it up.
+*Countries in the World:195
+*195 which breaks down as follows:
+*54 countries are in Africa
+*48 in Asia
+*44 in Europe
+*33 in Latin America and the Caribbean
+*14 in Oceania
+*2 in Northern America
+Source:https://www.worldometers.info/geography/how-many-countries-are-there-in-the-world/
+
+
+
+***General Problems with data***
+* 7 countries had less than 3 years of data total
+* 2016 data had almost no countries.The countries that were represented often had data missing.
+* HDI had 2/3 missing data
+* Generation variable has problems(not ordinal)
+* Africa has very few countries providing suicide data
+* Countries that have big population such as China and India are absent from the data.
+* The lack general lack of countries,there are only 101 out of 196
+
+So quite naturally I took the high road and imported another data set.
+
+
+
+```{r}
+ who<- read_csv("who-suicide-statistics/who_suicide_statistics.csv")
+```
+
+```{r}
+str(who)
+glimpse(who)
+```
+
+
+
+```{r}
+sum(complete.cases(who))
+sum(is.na(who))
+```
+Already better only a 16th of the data are NA's.
+
+```{r}
+summary(who)
+```
+
+
+```{r}
+       who1<- who%>%
+group_by(country) %>% 
+  summarise(total_suicides = sum(suicides_no,na.rm=TRUE)) %>%
+  arrange(desc(total_suicides))
+```
+
+```{r}
+head(who1)
+```
+
+
+#**Cleaning the data**
+
+```{r}
+sapply(who, function(x) sum(is.na(x)))
+```
+
+So,we can see that the na's are shown in suicides and the population variables.
+```{r}
+na_df <- who[is.na(who$suicides_no) | is.na(who$population),]
+nrow(na_df)
+```
+***Handling NA values***
+
+There are in total 7716 rows that contain missing values which is equal to 17.6% of the whole given dataset. We will try to do some sorting of Na's in order to figure out the NA values for both variables (Population, Suicide Number) are seen mostly in a specific year or country.This is to see if there is bias in a concentrated form or are the NA's random and thereby havig less of an overall effect.
+
+
+
+
+```{r}
+na_population <- who[is.na(who$population),]
+
+na_population$country <- factor(na_population$country, 
+                                levels = unique(na_population$country))
+na_population_by_country <- as.data.frame(table(na_population$country))
+colnames(na_population_by_country) <- c('country', 'frequence')
+# order data frame by decreasing frequnce
+na_population_by_country <- na_population_by_country[order(-na_population_by_country$frequence),]
+# order factor so that we can plot in decreasing freqence
+na_population_by_country$country <- factor(na_population_by_country$country, 
+                                           levels = unique(na_population_by_country$country[
+                                               order(-na_population_by_country$frequence, 
+                                                     na_population_by_country$country)]))
+# plotting na values of population by country in decreasing order
+ggplot(data=na_population_by_country, aes(x=country, y=frequence, fill = country)) +
+  geom_bar(stat="identity", width = 0.3) +
+  theme(axis.text.x=element_blank()) + ggtitle('NA Population Values per Country')
+```
+
+
+```{r}
+na_population$year <- factor(na_population$year, levels = unique(na_population$year))
+na_population_by_year <- as.data.frame(table(na_population$year))
+colnames(na_population_by_year) <- c('year', 'frequence')
+na_population_by_year$year <- factor(na_population_by_year$year, 
+                                     levels = 1978:2016, ordered = T)
+ggplot(data=na_population_by_year, aes(x=year, y=frequence, fill = year)) +
+  geom_bar(stat="identity", width = 0.3) +
+  theme(axis.text.x=element_blank()) + ggtitle('NA Population values per Year')
+```
+
+
+
+```{r}
+na_suicides <- who[is.na(who$suicides_no),]
+# we remove levels from the country and year factor that are missing
+na_suicides$country <- factor(na_suicides$country, levels = unique(na_suicides$country))
+na_suicides_by_country <- as.data.frame(table(na_suicides$country))
+colnames(na_suicides_by_country) <- c('country', 'frequence')
+# order levels of countries depending on the missing rows
+
+# order data frame by decreasing frequence
+na_suicides_by_country <- na_suicides_by_country[order(-na_suicides_by_country$frequence),]
+# order factor so that we can plot in decreasing freqence
+na_suicides_by_country$country <- factor(na_suicides_by_country$country, 
+                                         levels = unique(na_suicides_by_country$country[
+                                             order(-na_suicides_by_country$frequence, 
+                                                   na_suicides_by_country$country)]))
+
+
+ggplot(data=na_suicides_by_country, aes(x=country, y=frequence, fill = country)) +
+  geom_bar(stat="identity", width = 0.3) + 
+  ggtitle('NA suicide_no values per Country') + 
+  theme(axis.text.x=element_blank())
+
+```
+
+
+
+```{r}
+na_suicides$year <- factor(na_suicides$year, levels = unique(na_suicides$year))
+na_suicides_by_year <- as.data.frame(table(na_suicides$year))
+colnames(na_suicides_by_year) <- c('year', 'frequence')
+na_suicides_by_year$year <- factor(na_suicides_by_year$year, 
+                                   levels = 1978:2016, ordered = T)
+
+ggplot(data=na_suicides_by_year, aes(x=year, y=frequence, fill = year)) +
+  geom_bar(stat="identity", width = 0.3) + 
+  ggtitle('NA suicide_no Values per Year') + 
+  theme(axis.text.x=element_blank())
+```
+
+```{r}
+na_population_by_age <- as.data.frame(table(na_population$age))
+na_population_by_age
+```
+
+
+
+
+
+```{r}
+na_suicides_by_age <- as.data.frame(table(na_suicides$age))
+na_suicides_by_age
+```
+
+
+
+***Results***
+
+Plotting the NA values by year and by country lead us to the conclusion, that there is no particular connection between the missing data and the variables and they are pretty random. However, there are countries whose corresponding groups have always at least one NA value. (e.g Peru does not have any registered population)
+
+On the other hand, the fact that rows having NA Population are spread equally to the age groups, leads to the conclusion that all data of a year of a specific country should be missing (e.g. there is not a case where the suicided number for Denmark is missing only for the age group 15-24, but instead all age groups of this country for this year have NA value for the suicides variable).
+
+
+
+
+```{r}
+
+who$suicides_no <- as.numeric(who$suicides_no)
+who$population <- as.numeric(who$population)
+
+
+```
+
+There are many countries missing per year. We can see that nearly for half of the time period that we examine, we have data for at most 100 countries out of the 141 (so unfortunately not much better than are original data set ) mentioned in total. In order to handle these issues, there are different approaches that we could consider:
+
+*1A possible idea would be to complete all the missing rows with NA values and then try to impute/predict all of them. The problem is that on some occasions a lot of data are missing which makes us believe that probably it would be a bad idea to try to predict all of them, as a lot of bias would be added in our predictions.
+*2The other idea would be to fill in the data by searching the data in the WHO Database https://www.who.int/mental_health/prevention/suicide/countrydata/en/ and other internet resources.
+*3The third one would be to try to impute just the existing NA values using MICE package.
+*4The final fourth one would be to try to just keep just the complete cases of the existing dataset.
+
+I think the fouth option is the most diplomatic option so that's what I'm going to choose.
+#**Exploration and visualizing**
+## ***By Country***
+```{r}
+whoDF_s1 <- who %>% 
+  group_by(country) %>% 
+  summarise(total_suicides = sum(suicides_no,na.rm=TRUE)) %>%
+  arrange(desc(total_suicides))
+
+ggplot(whoDF_s1,aes(x=reorder(country,-total_suicides),y=total_suicides,fill=-total_suicides))+
+  geom_col() + theme(axis.text.x = element_text(angle = 90, hjust = 1))+
+  labs(x="Country",y="Count",title="Countrie's Suicides Stats")+
+  theme(plot.title = element_text(size=15,face="bold"))
+```
+
+## **By Year**
+
+```{r}
+whoDF_s3 <- who %>% 
+  group_by(year,country) %>% 
+  summarise(total_suicides = sum(suicides_no,na.rm=TRUE)) %>%
+  arrange(desc(total_suicides))
+
+ggplot(whoDF_s3,aes(x=year,y=total_suicides,fill=-total_suicides))+
+  geom_col() +
+  labs(x="Year",y="Count",title="Suicides Worldwide")+
+  theme(plot.title = element_text(size=15,face="bold"))
+```
+
+
+***Insights***
+*Clearly missing Data at the end of the Graph
+*Missing Data in the 80's Which is because of NA's from Russia In that period.
+## **By Age**
+
+```{r}
+whoDF_sa <- who %>% 
+  group_by(age) %>% 
+  summarise(total_suicides = sum(suicides_no,na.rm=TRUE)) %>%
+  arrange(desc(total_suicides))
+
+ggplot(whoDF_sa,aes(x=reorder(age,-total_suicides),y=total_suicides,fill=-total_suicides))+
+  geom_col() + theme(axis.text.x = element_text(angle = 90, hjust = 1))+
+  labs(x="Age",y="Count",title=" Age Suicides Stats")+
+  theme(plot.title = element_text(size=15,face="bold"))
+
+```
+## **By Gender**
+
+We Can clearly observe that the highest rate of suicide ocurrs at Middle Age. This surprisied me because I assumed the rate would be highest by the eldearly or teenagers. 
+
+```{r}
+whoDF_sb <- who %>% 
+  group_by(sex) %>% 
+  summarise(total_suicides = sum(suicides_no,na.rm=TRUE)) %>%
+  arrange(desc(total_suicides))
+
+ggplot(whoDF_sb,aes(x=reorder(sex,-total_suicides),y=total_suicides,fill=-total_suicides))+
+  geom_col() + theme(axis.text.x = element_text(angle = 90, hjust = 1))+
+  labs(x="Gender",y="Count",title="Suicide by Gender")+
+  theme(plot.title = element_text(size=15,face="bold"))
+```
+
+
+```{r}
+t.test(suicides_no ~ sex , data = who , alternative = "less")
+```
+We got the significant value as p-value is less than 2.2e-16. Therefore, we can firmly say that male are more likely to commited suicides than female in these time period.
+
+This may be due what Simon Haber vice-chair of research for the Department of Psychiatry at the University of Ottawa says. "Women are actually more likely to try to kill themselves - three to four times more likely. But men are more likely to die from it. That's a pattern that holds true across Canada, and in most of the rest of the world as well.
+That's mainly due to two things:One is that men use more lethal means [to attempt suicide], and the second is that they don't seek care as much." 
+
+
+***Insights***
+
+* Globally, the rate of suicide for men has been **~3.5x higher for men**
+* Both **male & female suicide rates peaked in 1995**, declining since and went up slightly in the late 2000's
+* This ratio of 3.5 : 1 (male : female) has remained relatively constant since the mid 90's
+* However, during the 80's this ratio was as low as 2.7 : 1 (male : female)
+
+
+Comparing the nations with the most Suicide by the numbers.
+
+```{r}
+whoDF_s6 <- who %>% 
+  filter(country == "Russian Federation",year%in%c("1997","2015","1980")) %>%
+  group_by(sex,age,year) %>% 
+  summarise(total_suicides = sum(suicides_no,na.rm=TRUE))
+
+ggplot(whoDF_s6,aes(x=factor(age,levels = c("5-14 years","15-24 years","25-34 years","35-54 years","55-74 years","75+ years")),y=total_suicides,fill=sex))+
+  geom_col() + theme(axis.text.x = element_text(angle = 90, hjust = 1))+
+  facet_wrap(whoDF_s6$year) +
+  labs(x="Age",y="Count",title="Suicides in Russia")+
+  theme(plot.title = element_text(size=15,face="bold"))
+```
+
+
+
+```{r}
+whoDF_s7 <- who %>% 
+  filter(country == "United States of America",year%in%c("1997","2015","1980")) %>%
+  group_by(sex,age,year) %>% 
+  summarise(total_suicides = sum(suicides_no,na.rm=TRUE))
+
+ggplot(whoDF_s7,aes(x=factor(age,levels = c("5-14 years","15-24 years","25-34 years","35-54 years","55-74 years","75+ years")),y=total_suicides,fill=sex))+
+  geom_col() + theme(axis.text.x = element_text(angle = 90, hjust = 1))+
+  facet_wrap(whoDF_s6$year) +
+  labs(x="Age",y="Count",title="Suicides in USA")+
+  theme(plot.title = element_text(size=15,face="bold"))
+```
+
+In short In russia Suicides have gone down while in the Usa it has gone up
+
+
+```{r}
+TC <- who %>% 
+  select(country, year, sex, age, suicides_no, population,) %>%
+  filter(country %in% c("Russian Federation","United States of America","Japan","France","Ukraine","Germany","Republic of Korea","Brazil","Poland","United Kingdom" ))
+
+```
+
+
+I wanted to see which countries had the most suicides in this data set by sheer numbers.
+```{r}
+whoDF_s8 <- TC%>% 
+  group_by(country) %>% 
+  summarise(total_suicides = sum(suicides_no,na.rm=TRUE)) %>%
+  arrange(desc(total_suicides))
+
+ggplot(whoDF_s8,aes(x=reorder(country,-total_suicides),y=total_suicides,fill=-total_suicides))+
+  geom_col() + theme(axis.text.x = element_text(angle = 90, hjust = 1))+
+  labs(x="Country",y="Count",title="Top Ten Countries")+
+  theme(plot.title = element_text(size=18,face="bold"))
+```
+Its Kinda a hodge podge. I guess Russia and Japan and USA makes sense but the rest of them (besides the European aspect) have very little in common.This breaks apart the idea that its because of single culture or economy or code of ethics. Every can point his finger at Japan and say " its very pressured there", but that is a micro not macro observation.
+
+
+```{r}
+df_top10 <- who %>% 
+  filter( (country== "Russian Federation")| (country== "United States of America") | (country=="Japan")| (country=="France")|  (country== "Ukraine") |(country=="Germany") |(country=="Republic of Korea")|(country=="Brazil")|(country== "United Kingdom")| (country== "Poland")   )
+```
+
+
+
+```{r}
+df7<- who%>%
+filter(   (country=="Japan")| (country=="France")|  (country== "Ukraine") |(country=="Germany") |(country=="Republic of Korea")|(country=="Brazil")|(country== "United Kingdom")   )
+
+```
+
+
+
+```{r}
+whoDF_10 <- df_top10 %>% 
+  group_by(year,country) %>% 
+  summarise(total_suicides = sum(suicides_no,na.rm=TRUE)) %>%
+  arrange(desc(total_suicides))
+
+ggplot(whoDF_10,mapping = aes(x=year, y=total_suicides, colour = country)) +geom_line(aes(linetype = country))
+
+```
+This is to show where the Na's kick in.
+```{r}
+hop <- df7 %>% 
+  group_by(year,country) %>% 
+  summarise(total_suicides = sum(suicides_no,na.rm=TRUE)) %>%
+  arrange(desc(total_suicides))
+
+ggplot(data = hop, mapping = aes(x =country , y = total_suicides)) + 
+  geom_boxplot() +
+  coord_flip()
+```
+This is me taking out the top three and trying to find a pattern.
+
+
+
+#Final Visualization
+```{r}
+df_country_group <- who %>%
+group_by(country) %>%
+summarise(sumsui= sum( as.numeric(suicides_no)),popsum = sum(as.numeric(population)))
+df_country_group <- na.omit(df_country_group)
+df_country_group_ratio<- df_country_group %>% mutate(ratioSP =sumsui/popsum)
+df_country_group_ratio <- df_country_group_ratio %>% arrange(-ratioSP)
+df_country_group_ratio_top <- head(df_country_group_ratio,10)
+```
+
+
+
+
+So for this I wanted first to show something satistical.What I've done is instead of just having the countries with biggest numbers I wanted to get a ratio showing the countries that proportionaly have largest amounts of suicide.
+```{r}
+ df_country_group_ratio_top1 <- df_country_group_ratio_top %>%
+   arrange(ratioSP)
+ggplot(df_country_group_ratio_top1,aes(x = ratioSP,   y = country )) +
+  scale_y_discrete(limits= df_country_group_ratio_top1$country) +
+ geom_segment( aes(xend=0,yend=country),size = 1,color='red2')+
+  geom_point(fill="red2",color="green",size=4,shape=21,stroke=2) +
+  ggtitle("Countries with highest suicide to population ratio")+
+   labs(x="Ratio : Suicide/Population", y="Country")
+```
+
+Made it Interactive.
+```{r}
+df_country_group_ratio_top1 <- df_country_group_ratio_top %>%
+    arrange(ratioSP)
+    
+ggplotly(
+    ggplot(df_country_group_ratio_top1,aes(x = ratioSP,   y = country )) +
+    scale_y_discrete(limits= df_country_group_ratio_top1$country) +
+    geom_segment( aes(xend=0,yend=country),size = 1,color='red2')+
+    geom_point(fill="red2",color="red4",size=4,shape=21,stroke=2) +
+    #ggtitle("Countries with highest suicide to population ratio")+
+    labs(x="Ratio : Suicide/Population", y="Country")
+)
+```
+
+
+
+#Final Thoughts
+
+
+*Based on the 2016 National Survey of Drug Use and Mental Health it is estimated that 0.5 percent of the adults aged 18 or older made at least one suicide attempt. This translates to approximately 1.3 million adults. Adult females reported a suicide attempt 1.2 times as often as males. Further breakdown by gender and race are not available.
+*This data set needed more varibles.
+*Suprisied about middle age people being the most prone to suicide.
+*In conclusion Suicide is epidemic with a large amount of causes but a dearth of solutions.
+There needs to be more research conducted on the subject and less preconcived notions.
+
+
+
+
+#Essay
+
+I chose this data set primarily because suicide exists in the category of things, that while being researched, is one of those areas of suffering that we have yet to get a definite scientific handle on. Part of the reason is because there is no clear definite reason for what exactly causes suicide. Directly related to this is the mix of the numerous reasons and the degree of those reasons why one would get to the point of committing suicide. Human beings are complex creatures, and actively do and are acted upon for host of dependent and independent reasons; all the while interfacing with a world which can frankly be cruel at times.  The biggest hindrance ironically is the very thing that give us our understanding. The human mind is as multivariate and complex as any weather pattern as powerful as any super-computer as scattered and seemingly random as the billions of causes and reasons that happens with man's daily interaction with his world. 
+All of what have stated above leads to a situation in which people can point fingers at the stereotypical and false outliers and saying "that's what causes suicide". What I wanted to show at the very least with this data set was the truly global nature of suicide and how it effects all races, groups countries regardless of socioeconomic standing. This is  what the New York Times Reported In 2016;" When it comes to suicide and suicide attempts there are rate differences depending on demographic characteristics such as age, gender, ethnicity and race. Nonetheless, suicide occurs in all demographic groups".
+Part of the problem is classification as the WHO Reports. "In 2015, 505,507 people visited a hospital for injuries due to self-harm. This number suggests that for every reported suicide death, approximately 11.4 people visit a hospital for self-harm related injuries. However, because of the way these data are collected, we are not able to distinguish intentional suicide attempts from non-intentional self-harm behaviors."
+	In my project there were many obstacles to overcome such as; figuring out the Na's screwed around with the plots. Another difficulty was just figuring out how to group everything. I would say my biggest challenge was when I mutated the last visualization to have a new variable to get the real ratio of suicide numbers in a country. My smallest challenge was accidently deleting my project this morning and trying to rush everything to get the project done by the dead line, "still have 20 minutes".2:44
+	When cleaning the data, I did consider trying to retrieve the information, but it proved too cumbersome. That the same fate my met interactive map fell to I really wish I could have executed that properly.
+	Its sad, partially because this data set was a bit bare bones it sort of conformed my preconditioned biases. The truth is there are some clear indicators of suicide there just often shaded by other unseen variables. I was surprised about how global suicide it like other human things it tragicaly knows no boundary nor country or coulter. The age thing also really shocked me who would have though middle age people would be the most prone to suicide.
+	In conclusion I hope that there will be more research conducted about suicide and one day we will be rid of this very human curse.
+
+Biblography: New York times
+United Nations Development Program. (2018). Human development index (HDI). Retrieved from http://hdr.undp.org/en/indicators/137506
+
+World Bank. (2018). World development indicators: GDP (current US$) by country:1985 to 2016. Retrieved from http://databank.worldbank.org/data/source/world-development-indicators#
+
+[Szamil]. (2017). Suicide in the Twenty-First Century [dataset]. Retrieved from https://www.kaggle.com/szamil/suicide-in-the-twenty-first-century/notebook
+
+World Health Organization. (2018). Suicide prevention. Retrieved from http://www.who.int/mental_health/suicide-prevention/en/
+
+
